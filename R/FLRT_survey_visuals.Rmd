@@ -1,0 +1,299 @@
+---
+title: "FLRT Survey Summary Visuals"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, warning = F, message = F)
+
+library(readxl)
+library(dplyr)
+library(stringr)
+library(tidyr)
+library(lubridate)
+library(ggplot2)
+library(janitor)
+library(patchwork)
+library(kableExtra)
+
+td <- read_excel("FLRT_survey.xlsx", sheet = 2, col_names = F, na = "") %>% 
+  dplyr::rename(Var = `...1`,
+                Var2 = `...2`,
+                Var3 = `...3`) %>% 
+  tidyr::unite(., Var, c("Var","Var2","Var3"), sep = " ") %>% 
+  mutate(Var = str_replace_all(Var, "NA", " ")) %>% 
+  mutate(Var = str_squish(Var)) %>% 
+  gather(L, Value, -Var)
+
+  
+dates <- unique(td[td$Var == c("Date"),]) %>% 
+  dplyr::select(L, Value) 
+
+location <- unique(td[td$Var == c("Location from / to"),]) %>% 
+  dplyr::select(L, Value) 
+
+distance <- unique(td[td$Var == c("Road Length miles"),]) %>% 
+  dplyr::select(L, Value) 
+
+out <- td %>% 
+  left_join(., dates, "L") %>% 
+  left_join(., location, "L") %>% 
+  left_join(., distance, "L") %>% 
+  dplyr::select(-L) %>% 
+  dplyr::rename(count = Value.x,
+                date = Value.y,
+                location = Value.x.x,
+                distance = Value.y.y) %>% 
+  filter(!str_detect(Var,"Date|Location|Road Length miles|Weight \\(lbs\\) lbs - bathroom scale")) %>% 
+  mutate(date = excel_numeric_to_date(as.numeric(date)),
+         count = ifelse(is.na(count),0,count),
+         class = ifelse(str_detect(Var, "Nips"), "Nips",
+                       ifelse((str_detect(Var, "bottles") & !str_detect(Var, "Nips")),"bottles",
+                              ifelse(str_detect(Var, "cans"),"cans",
+                                     ifelse(str_detect(Var, "bags"), "bags",
+                                                   ifelse(str_detect(Var,"cups"),"cups",NA))))),
+         use = ifelse(str_detect(Var, "lcohol|Nips"), "alcohol",
+                      ifelse(str_detect(Var, "food"), "Food service",NA)),
+         count = as.numeric(count)) %>% 
+  unite(use_class, c("use","class"), remove = F, sep = " ") %>% 
+  mutate(use_class = str_squish(str_replace_all(use_class,"NA |NA","")),
+         Var = ifelse(str_detect(Var, "paraphernalia"),"Cig. para.",
+                      ifelse(str_detect(Var, "Nips"),"Nips",
+                          ifelse(str_detect(Var, "food service"),
+                              "Food service packaging",Var))))
+         
+
+
+#new categories
+new <- out %>% mutate(new = ifelse(str_detect(Var, c("Food service packaging|Water bottles|Straws|cups|Soft Drinks")),"Food service",
+                            ifelse((str_detect(Var, "lcohol") & !str_detect(Var, "Nips")),"Other alcoholic beverage containers",
+                                   ifelse(str_detect(Var, "Residential"), "Residential trash and recyclables",
+                                          ifelse(str_detect(Var,"Construction"),
+                                                            "Construction materials",
+                                                 ifelse(str_detect(Var, "Nips"),"Nips",
+                                                            "Other") )))))
+               
+               
+#Summary statistics in box: 
+# date range, percentages, totals, number surveys
+#"Phase 1 litter survey" as title on plots 
+
+```
+
+```{r, fig.align='center', fig.width=8, fig.height=5}
+#Start at the lowest level of trash
+out %>% group_by(Var) %>%
+  dplyr::summarise(Total = sum(count)) %>%
+  # filter(use_class != "") %>% 
+   mutate(Alcohol = ifelse(str_detect(Var,"lcohol|Nips"),"Alcohol","Non-alcoholic")) %>% 
+  ggplot() + 
+  geom_bar(aes(x = reorder(Var,-Total), y = Total, fill = Alcohol),
+           stat = "identity") +
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  xlab("") +
+  ggtitle("Low-level survey summary") 
+```
+
+
+```{r, fig.align='center', fig.width=8, fig.height=5}
+out %>% group_by(Var) %>%
+dplyr::summarise(Total = sum(count)) %>%
+  filter(Var != "Cig. para.") %>% 
+  mutate(Alcohol = ifelse(str_detect(Var,"lcohol|Nips"),"Alcohol","Non-alcoholic")) %>% 
+  ggplot() + 
+  geom_bar(aes(x = reorder(Var,-Total), y = Total, fill = Alcohol),
+           stat = "identity") +
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  xlab("") +
+  ggtitle("Low-level survey summary (no cig. para.)")
+
+```
+
+
+```{r, fig.align='center', fig.width=8, fig.height=5}
+out %>% group_by(Var) %>%
+  dplyr::summarise(Total = sum(count)) %>% 
+  filter(Var != "Cig. para.") %>% 
+  mutate(Alcohol = ifelse(str_detect(Var,"lcohol|Nips"),"Alcohol","Non-alcoholic")) %>% 
+  top_n(12, Total) %>% 
+  ggplot() + 
+  geom_bar(aes(x = reorder(Var,-Total), y = Total, fill = Alcohol),
+           stat = "identity") +
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  xlab("") +
+  ggtitle("Low-level survey summary (top 12 contributors)")
+
+```
+
+```{r}
+plt <- new %>% group_by(new) %>%
+  filter(Var != "Cig. para.") %>% 
+  dplyr::summarise(total_new = sum(count)) %>% 
+  mutate(perc_tot = (total_new/sum(total_new)) * 100) %>%
+  ggplot() + 
+  geom_bar(aes(x = reorder(new,-perc_tot), y = perc_tot, fill= new),
+           stat = "identity") +
+  scale_fill_manual(values = c("Nips" = "red", 
+                                    "Other alcoholic beverage containers" = "orange",
+                                    "Food service" = "black",
+                                    "Residential trash and recyclables" = "grey",
+                                    "Other" = "magenta",
+                                    "Construction materials" = "brown"))+
+  guides(fill = guide_legend(title = "Litter type")) +
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  xlab("") +
+  ggtitle("Falmouth Litter Reduction Team Phase 1 Litter Survey Results",
+          subtitle = "Based on 2,062 items from 19 surveys at 16 locations between 12/14/2018 - 4/27/2019") +
+  # labs(caption = "Roadside litter survey results based on 2,062 items counted from 19 surveys at 16 locations in Falmouth, MA.")+
+ylab("Total litter (%)") +
+  geom_text(aes(x = reorder(new,-perc_tot), 
+                y = floor(perc_tot * 0.95),
+                label = paste0(floor(perc_tot),"%")),
+                size = 4, 
+                position = position_stack(vjust = 0.5),
+                color = "white")
+
+ggsave("FLRT_results.pdf", dpi = 400)
+```
+
+```{r}
+
+class_list <- new %>%
+   filter(Var != "Cig. para.") %>%
+   group_by(new) %>% 
+   mutate(Var = str_remove_all(Var, " all sizes| - all sizes")) %>% 
+   mutate(Var = str_replace(Var, "Construction Mtls|Residential trash|Nips", "-")) %>% 
+  mutate(Var = ifelse(str_detect(Var,"Soft Drinks"),
+                      "Soft drinks & energy drinks (cans, glass, plastic)",
+                      ifelse(str_detect(Var, "cups"),
+                             "Cups (foam, plastic, paper)",
+                             ifelse(str_detect(Var, "Food service"),"Food service packaging (wraps, containers etc.)",
+                                    ifelse(str_detect(Var,"lcoholic"), "Alcoholic beverages (> 200 ml; glass and cans)",
+                                           ifelse(str_detect(Var,
+                                                             "Plastic bags"), "Plastic bags (Thick or thin plastic)",
+                                                  ifelse(str_detect(Var, "Paper bags"),"Paper bags (supermarket, retail)",ifelse(str_detect(Var,"Food cans"),"Food cans (soup, tuna, etc)",Var)))))))) %>% 
+   filter(!str_detect(Var, "Food bottles")) %>% 
+   distinct(Var) %>% 
+   summarise(Var = paste(Var, collapse=", "))
+
+tbl <- new %>%
+  filter(Var != "Cig. para.") %>%
+  group_by(new) %>%
+  summarise(n = sum(count)) %>% 
+  left_join(class_list, by = "new") %>% 
+  dplyr::rename(`Litter class` = new, Total = n, Examples = Var) %>% 
+  arrange(desc(Total))
+
+
+knitr::kable(tbl, "latex", booktabs = T, caption = "Litter totals \\& breakdown") %>%
+  kable_styling(full_width = F) %>%
+  column_spec(1, width = c("5cm")) %>% 
+  column_spec(2, width = c("1cm")) %>% 
+  column_spec(3, width = c("6cm"))
+```
+
+
+
+```{r, fig.align='left', fig.width=8, fig.height=7}
+#trash breakdown by top 10 contributors
+top_contrib <- out %>% group_by(Var) %>%
+  dplyr::summarise(Total = sum(count)) %>% 
+  filter(Var != "Cig. para.") %>% 
+  mutate(Alcohol = ifelse(str_detect(Var,"lcohol|Nips"),"Alcohol","Non-alcoholic")) %>% 
+  top_n(12, Total) %>% 
+  pull(Var)
+
+out %>% group_by(location) %>%
+  filter(Var != "Cig. para.",
+         Var %in% top_contrib) %>% 
+  mutate(total_loc = sum(count)) %>% 
+  mutate(perc_tot = count/total_loc) %>%
+  filter(perc_tot != 0) %>% 
+  ggplot() + 
+  geom_bar(aes(x = location, y = perc_tot, fill = Var),
+           stat = "identity") +
+
+  # scale_fill_hue(l = 50, c = 150) + 
+  scale_fill_manual(values = RColorBrewer::brewer.pal(12,"Paired")) +
+  scale_y_continuous(expand = c(0.001,0.001))+
+  # scale_x_continuous(expand = c(0.01, 0.01),limits = c(0,1)) +
+  coord_flip() +
+    guides(fill = guide_legend(nrow = 5, byrow = TRUE, title = "Class",
+                             title.position = "top")) +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 7),
+        axis.text.y = element_text(size = 6),
+        axis.text.x = element_text(size = 6)) +
+  ylab("") +
+  xlab("") +
+  ggtitle("Trash breakdown by location",
+          subtitle = "Excludes classes outside top 12")
+
+```
+
+```{r, fig.align='center', fig.width=8, fig.height=6}
+a <- out %>% group_by(use) %>%
+  filter(Var != "Cig. para.") %>% 
+  dplyr::summarise(perc_tot = sum(count)) %>% 
+  dplyr::mutate(perc_tot = perc_tot/sum(perc_tot)) %>% 
+  mutate(group = 1,
+         use = ifelse(is.na(use),"Other",use),
+         use = str_to_title(use)) %>% 
+  # filter(perc_tot != 0) %>% 
+  ggplot() + 
+  geom_bar(aes(x = group, y = perc_tot,  fill = use),
+           stat = "identity") + 
+  scale_y_continuous(expand = c(0.001,0.001))+
+  guides(fill = guide_legend(title = "Source")) +
+  scale_fill_manual(values = RColorBrewer::brewer.pal(3,"Paired")) +
+  coord_flip() +
+  theme_bw() +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        # panel.grid.major = element_blank(),
+        # panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        legend.position = "bottom",
+        legend.text = element_text(size = 6)) +
+  ylab("Percent total trash") +
+  ggtitle("Major sources of trash in Falmouth")
+
+b <- out %>% group_by(use_class) %>%
+  filter(Var != "Cig. para.") %>% 
+  dplyr::summarise(perc_tot = sum(count)) %>% 
+  dplyr::mutate(perc_tot = perc_tot/sum(perc_tot)) %>% 
+  mutate(group = 1,
+         use_class = ifelse(use_class == "","Other",use_class),
+         use_class = str_to_title(use_class),
+         use_class = ifelse(str_detect(use_class,"Food"),"Food service",use_class)) %>% 
+  # filter(perc_tot != 0) %>% 
+  ggplot() + 
+  geom_bar(aes(x = group, y = perc_tot,  fill = use_class),
+           stat = "identity") + 
+  scale_y_continuous(expand = c(0.001,0.001))+
+  guides(fill = guide_legend(title = "Source")) +
+  scale_fill_manual(values = RColorBrewer::brewer.pal(10,"Paired")) +
+  coord_flip() +
+  theme_bw() +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        # panel.grid.major = element_blank(),
+        # panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        legend.position = "bottom",
+        legend.text = element_text(size = 6)) +
+  ylab("Percent total trash") +
+  ggtitle("")
+
+
+a + b + plot_layout(nrow = 2)
+
+```
