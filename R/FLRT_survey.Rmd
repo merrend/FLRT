@@ -1,0 +1,44 @@
+---
+title: ""
+output:
+  rmarkdown::html_document:
+    theme: lumen
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(sf)
+library(ggmap)
+library(ggplot2)
+library(leaflet)
+library(readxl)
+library(dplyr)
+library(stringr)
+library(tidyr)
+library(lubridate)
+library(ggplot2)
+library(janitor)
+
+```
+
+
+### Falmouth Litter Reduction Team Survey Efforts
+
+```{r, echo = F, warning = F, out.width = "100%", fig.height = 7}
+data.dir <- here::here("data")
+load(file = file.path(data.dir,"flrt_data.rdata"))
+
+falmouth <- c(-70.693531,41.53, -70.448287,  41.625940)
+
+
+leaflet() %>%
+  setView(lng = -70.617672, lat = 41.564279, zoom = 12) %>%
+  addTiles() %>% 
+  addPolylines(data = flrt_nonrandom_surv1, color = "black", 
+               popup = ~paste("Nips found:", as.character(count))) %>% 
+  addPolylines(data = flrt_random_surv, color = "red") 
+
+
+```
+
+Collection sites for FLRT roadside litter surveys. Paths shown in red are related to a project specifically concerned with nip abundance on Falmouth roads. Black lines show general litter collection efforts where nips were also counted. **Click on black lines** to return the number of nips found in that survey effort.  
