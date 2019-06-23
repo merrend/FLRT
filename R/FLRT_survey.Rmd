@@ -1,9 +1,16 @@
 ---
-title: ""
+title: "Hello World"
 output:
   rmarkdown::html_document:
     theme: lumen
 ---
+```{r, echo = F}
+htmltools::img(src = knitr::image_uri(f = file.path(here::here("images"),"FLRT-icon-CAPE.jpg")), 
+               alt = 'logo', 
+               style = 'position:absolute; top:0; right:0; padding:10px; width: 20%;')
+
+```
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -18,7 +25,6 @@ library(tidyr)
 library(lubridate)
 library(ggplot2)
 library(janitor)
-
 ```
 
 

@@ -6,6 +6,8 @@ library(dplyr)
 library(sf)
 library(rgdal)
 library(ggplot2)
+library(janitor)
+library(readxl)
 
 
 #Find all .GPX files (random samples)
