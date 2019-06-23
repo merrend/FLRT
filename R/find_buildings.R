@@ -108,6 +108,7 @@ ndata2 <- ndata %>%
          right_upr = ilink(fit_link + (2 * se_link)),
          right_lwr = ilink(fit_link - (2 * se_link)))
 
+
 anova(mod, null_mod, test = "Chisq")
 
 #Plot it
@@ -116,5 +117,7 @@ ggplot(data = ndata2) +
                  y = nips)) +
   geom_line(aes(x = buildings, y = fit_resp)) +
   geom_ribbon(aes(x = buildings, 
+
                   ymin = right_lwr, ymax = right_upr), alpha = 0.1) +
   ggtitle("Nip litter ~ building density")
+
