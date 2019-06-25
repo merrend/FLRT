@@ -7,7 +7,11 @@ library(tidyr)
 
 #Get nip data
 data.dir <- here::here('data')
-nips <- read.csv(file.path(data.dir, "nip_data.csv"))
+nips <- read.csv(file.path(data.dir, "nip_data.csv"), stringsAsFactors = F)
+names(nips)[1] <- "date"
+nips %<>% mutate(date = as.Date(date, "%m/%d/%y")) 
+
+load(file.path(data.dir, "flrt_data.rdata"))
 
 #Get polygons for buildings
 falmouth_bb <- getbb("falmouth ma")
@@ -16,32 +20,41 @@ fal_buildings <-
   falmouth_q %>%
   add_osm_feature(key = "building")%>%
   osmdata_sf()
+
 fal_buildings <- fal_buildings$osm_polygons %>% 
   st_transform(3035)
 
-#transform nips data to sf object and reproject to draw circles with accurate radii
-s1 <- st_as_sf(nips, coords = c("center_lon", "center_lat"), 
-               crs = 4326) %>% 
+t <- flrt_random_surv %>% 
   st_transform(3035) %>% 
-  mutate(id = 1:length(geometry))
+  mutate(date = as.Date(date, "%Y-%m-%d")) %>% 
+  mutate(date = as.Date(date, "%m/%d/%y")) %>%
+  distinct()
+  dplyr::rename(sample = column_label) %>% 
+  right_join(.,nips, by = "date")
 
-dates <- s1 %>%  
-  dplyr::select( date, sample) %>% 
-  st_set_geometry(NULL)
-
-nip_df <- s1 %>% 
-  dplyr::select(date, sample, nips) %>% 
-  st_set_geometry(NULL)
+# #transform nips data to sf object and reproject to draw circles with accurate radii
+# s1 <- st_as_sf(nips, coords = c("center_lon", "center_lat"), 
+#                crs = 4326) %>% 
+#   st_transform(3035) %>% 
+#   mutate(id = 1:length(geometry))
+# 
+# dates <- s1 %>%  
+#   dplyr::select( date, sample) %>% 
+#   st_set_geometry(NULL)
+# 
+# nip_df <- s1 %>% 
+#   dplyr::select(date, sample, nips) %>% 
+#   st_set_geometry(NULL)
 
 
 mod_df <- NULL
 for (i in seq(10,200,10)){
   
-  #Draw circle with 0.1 mile radius
-  s1_circles <- st_buffer(s1, dist = i) 
+  #Draw polygons with varying radii around paths
+  flrt_line_buffer <- st_buffer(flrt_lines, dist = i) 
   
   #Intersect circles with building polygons. How many fall into each circle?
-  found_buildings <- s1_circles %>%
+  found_buildings <- flrt_line_buffer %>%
     st_intersection(fal_buildings) %>% 
     st_transform(4326) %>%  
     group_by(date, sample) %>% 

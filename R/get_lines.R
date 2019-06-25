@@ -27,7 +27,7 @@ proj4string(survey_df) <- CRS("+proj=longlat +datum=NAD27 +no_defs")
 
 #Convert to SF
 flrt_random_surv <- survey_df %>% as("sf") %>% 
-  dplyr::group_by(column_label) %>%
+  dplyr::group_by(column_label, date = stringr::str_extract(time, "\\d{4}.\\d{2}.\\d{2}")) %>%
   dplyr::summarise(do_union=FALSE) %>%
   sf::st_cast("LINESTRING")  %>% 
   st_transform(4267)
@@ -77,7 +77,7 @@ out <- td %>%
                 location = Value.x.x,
                 distance = Value.y.y) %>% 
   filter(!str_detect(Var,"Date|Location|Road Length miles|Weight \\(lbs\\) lbs - bathroom scale")) %>% 
-  mutate(date = excel_numeric_to_date(as.numeric(date)),
+  mutate(date = janitor::excel_numeric_to_date(as.numeric(date)),
          count = ifelse(is.na(count),0,count),
          class = ifelse(str_detect(Var, "Nips"), "Nips",
                         ifelse((str_detect(Var, "bottles") & !str_detect(Var, "Nips")),"bottles",
